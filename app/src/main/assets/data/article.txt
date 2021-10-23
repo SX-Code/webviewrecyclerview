@@ -1,0 +1,504 @@
+<h2 id="原因">原因</h2>
+<p>在springboot项目里我们希望接口返回的数据包含至少三个属性：</p>
+<ul>
+<li>code：请求接口的返回码，成功或者异常等返回编码，例如定义请求成功。</li>
+<li>message：请求接口的描述，也就是对返回编码的描述。</li>
+<li>data：请求接口成功，返回的结果。</li>
+</ul>
+<pre><code class="language-json">{
+  "code":20000,
+  "message":"成功",
+  "data":{
+    "info":"测试成功"
+  }
+}
+</code></pre>
+<h2 id="开发环境">开发环境</h2>
+<ul>
+<li>工具：IDEA</li>
+<li>SpringBoot版本：<code>2.2.2.RELEASE</code></li>
+<li>依赖</li>
+</ul>
+<pre><code class="language-xml">&lt;dependency&gt;
+  &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+  &lt;artifactId&gt;spring-boot-starter&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;!-- fastjson --&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;com.alibaba&lt;/groupId&gt;
+  &lt;artifactId&gt;fastjson&lt;/artifactId&gt;
+  &lt;version&gt;1.2.62&lt;/version&gt;
+&lt;/dependency&gt;
+&lt;!-- Spring web --&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+  &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;!-- lombok --&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;org.projectlombok&lt;/groupId&gt;
+  &lt;artifactId&gt;lombok&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;!-- swagger3 --&gt;
+&lt;dependency&gt;
+  &lt;groupId&gt;io.springfox&lt;/groupId&gt;
+  &lt;artifactId&gt;springfox-boot-starter&lt;/artifactId&gt;
+  &lt;version&gt;3.0.0&lt;/version&gt;
+&lt;/dependency&gt;
+</code></pre>
+<h2 id="创建-springboot-工程">创建 SpringBoot 工程</h2>
+<p>新建 SpringBoot 项目<code>common_utils</code>，包名<code>com.spring.utils</code></p>
+<h2 id="返回结果统一">返回结果统一</h2>
+<h3 id="创建code枚举">创建code枚举</h3>
+<p>在<code>com.spring.utils</code>中创建 <code>pojo</code> 包，并添加枚举<code>ResultCode</code></p>
+<pre><code class="language-java">public enum ResultCode {
+
+  /* 成功状态码 */
+  SUCCESS(20000, "成功"),
+  /* 参数错误 */
+  PARAM_IS_INVALID(1001, "参数无效"),
+  PARAM_IS_BLANK(1002, "参数为空"),
+  PARAM_TYPE_BIND_ERROR(1003, "参数类型错误"),
+  PARAM_NOT_COMPLETE(1004, "参数缺失"),
+  /* 用户错误 2001-2999*/
+  USER_NOTLOGGED_IN(2001, "用户未登录"),
+  USER_LOGIN_ERROR(2002, "账号不存在或密码错误"),
+  SYSTEM_ERROR(10000, "系统异常，请稍后重试");
+
+  private Integer code;
+  private String message;
+
+  private ResultCode(Integer code, String message) {
+    this.code = code;
+    this.message = message;
+  }
+
+  public Integer code() {
+    return this.code;
+  }
+  public String message() {
+    return this.message;
+  }
+}
+</code></pre>
+<ul>
+<li>可根据项目自定义，结果返回码</li>
+</ul>
+<h3 id="创建返回结果实体">创建返回结果实体</h3>
+<p>在 <code>pojo</code> 包中添加返回结果类<code>R</code></p>
+<pre><code class="language-java">@Data
+@ApiModel(value = "返回结果实体类", description = "结果实体类")
+public class R implements Serializable {
+
+  private static final long serialVersionUID = 1L;
+
+  @ApiModelProperty(value = "返回码")
+  private Integer code;
+
+  @ApiModelProperty(value = "返回消息")
+  private String message;
+
+  @ApiModelProperty(value = "返回数据")
+  private Object data;
+
+  private R() {
+
+  }
+
+  public R(ResultCode resultCode, Object data) {
+    this.code = resultCode.code();
+    this.message = resultCode.message();
+    this.data = data;
+  }
+
+  private void setResultCode(ResultCode resultCode) {
+    this.code = resultCode.code();
+    this.message = resultCode.message();
+  }
+
+  // 返回成功
+  public static R success() {
+    R result = new R();
+    result.setResultCode(ResultCode.SUCCESS);
+    return result;
+  }
+  // 返回成功
+  public static R success(Object data) {
+    R result = new R();
+    result.setResultCode(ResultCode.SUCCESS);
+    result.setData(data);
+    return result;
+  }
+
+  // 返回失败
+  public static R fail(Integer code, String message) {
+    R result = new R();
+    result.setCode(code);
+    result.setMessage(message);
+    return result;
+  }
+  // 返回失败
+  public static R fail(ResultCode resultCode) {
+    R result = new R();
+    result.setResultCode(resultCode);
+    return result;
+  }
+}
+</code></pre>
+<h3 id="自定义一个注解">自定义一个注解</h3>
+<p>新建包<code>annotation</code>，并添加<code>ResponseResult</code>注解类</p>
+<pre><code class="language-java">@Retention(RetentionPolicy.RUNTIME)
+@Target({ ElementType.TYPE, ElementType.METHOD})
+@Documented
+public @interface ResponseResult {
+
+}
+</code></pre>
+<h3 id="定义拦截器">定义拦截器</h3>
+<p>新建包<code>interceptor</code>，并添加<code>ResponseResultInterceptor</code>Java类</p>
+<pre><code class="language-java">@Component
+public class ResponseResultInterceptor implements HandlerInterceptor {
+  //标记名称
+  public static final String RESPONSE_RESULT_ANN = "RESPONSE-RESULT-ANN";
+
+  @Override
+  public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
+    throws Exception {
+    // TODO Auto-generated method stub
+    if (handler instanceof HandlerMethod) {
+      final HandlerMethod handlerMethod = (HandlerMethod) handler;
+      final Class&lt;?&gt; clazz = handlerMethod.getBeanType();
+      final Method method = handlerMethod.getMethod();
+      // 判断是否在类对象上添加了注解
+      if (clazz.isAnnotationPresent(ResponseResult.class)) {
+        // 设置此请求返回体，需要包装，往下传递，在ResponseBodyAdvice接口进行判断
+        request.setAttribute(RESPONSE_RESULT_ANN, clazz.getAnnotation(ResponseResult.class));
+      } else if (method.isAnnotationPresent(ResponseResult.class)) {
+        request.setAttribute(RESPONSE_RESULT_ANN, method.getAnnotation(ResponseResult.class));
+      }
+    }
+    return true;
+  }
+}
+</code></pre>
+<ul>
+<li>用于拦截请求，判断 Controller 是否添加了<code>@ResponseResult</code>注解</li>
+</ul>
+<h3 id="注册拦截器">注册拦截器</h3>
+<p>新建包<code>config</code>，并添加<code>WebAppConfig</code>配置类</p>
+<pre><code class="language-java">@Configuration
+public class WebAppConfig implements WebMvcConfigurer {
+
+    // SpringMVC 需要手动添加拦截器
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        ResponseResultInterceptor interceptor = new ResponseResultInterceptor();
+        registry.addInterceptor(interceptor);
+        WebMvcConfigurer.super.addInterceptors(registry);
+    }
+}
+</code></pre>
+<h3 id="方法返回值拦截处理器">方法返回值拦截处理器</h3>
+<p>新建包<code>handler</code>，并添加<code>ResponseResultHandler</code>配置类，实现<code>ResponseBodyAdvice</code>重写两个方法</p>
+<pre><code class="language-java">import org.springframework.web.method.HandlerMethod;
+
+/**
+ * 使用 @ControllerAdvice &amp; ResponseBodyAdvice
+ * 拦截Controller方法默认返回参数，统一处理返回值/响应体
+ */
+@ControllerAdvice
+public class ResponseResultHandler implements ResponseBodyAdvice&lt;Object&gt; {
+
+   // 标记名称
+   public static final String RESPONSE_RESULT_ANN = "RESPONSE-RESULT-ANN";
+
+
+   // 判断是否要执行 beforeBodyWrite 方法，true为执行，false不执行，有注解标记的时候处理返回值
+   @Override
+   public boolean supports(MethodParameter arg0, Class&lt;? extends HttpMessageConverter&lt;?&gt;&gt; arg1) {
+      ServletRequestAttributes sra = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+      HttpServletRequest request = sra.getRequest();
+      // 判断请求是否有包装标记
+      ResponseResult responseResultAnn = (ResponseResult) request.getAttribute(RESPONSE_RESULT_ANN);
+      return responseResultAnn == null ? false : true;
+   }
+
+   // 对返回值做包装处理
+   @Override
+   public Object beforeBodyWrite(Object body, MethodParameter arg1, MediaType arg2,
+                          Class&lt;? extends HttpMessageConverter&lt;?&gt;&gt; arg3, ServerHttpRequest arg4, ServerHttpResponse arg5) {
+      if (body instanceof R) {
+         return (R) body;
+      } else if (body instanceof String) {
+          return body;
+      }
+      return R.success(body);
+   }
+}
+</code></pre>
+<ul>
+<li>实现<code>ResponseBodyAdvice</code>重写两个方法</li>
+<li>添加<code>@ControllerAdvice</code>注解</li>
+</ul>
+<h3 id="测试">测试</h3>
+<p>新建包<code>controller</code>，并添加<code>TestController</code>测试类</p>
+<pre><code class="language-java">@RestController
+@ResponseResult
+public class TestController {
+
+  @GetMapping("/test")
+  public Map&lt;String, Object&gt; test() {
+    HashMap&lt;String, Object&gt; data = new HashMap&lt;&gt;();
+    data.put("info", "测试成功");
+    return data;
+  }
+}
+</code></pre>
+<ul>
+<li>添加<code>@ResponseResult</code>注解</li>
+</ul>
+<p>启动项目，在默认端口: <code>8080</code></p>
+<p>浏览器访问地址：<code>localhost:8080/test</code></p>
+<pre><code class="language-json">{"code":20000,"message":"成功","data":{"info":"测试成功"}}
+</code></pre>
+<h3 id="总结">总结</h3>
+<p>1、创建code枚举和返回结果实体类</p>
+<p>2、自定义一个注解<code>@ResponseResult</code></p>
+<p>3、定义拦截器，拦截请求，判断Controller上是否添加了<code>@ResponseResult</code>注解。如果添加了注解在request中添加注解标记，往下传递</p>
+<p>4、添加<code>@ControllerAdvice</code>注解 ，实现<code>ResponseBodyAdvice</code>接口，并重写两个方法，通过判断request中是否有注解标记，如果有就往下执行，进一步包装。没有就直接返回，不需包装。</p>
+<h3 id="问题">问题</h3>
+<p>1、如果要返回错误结果，这种方法显然不方便</p>
+<pre><code class="language-java">@GetMapping("/fail")
+public R error() {
+  int res = 0; // 查询结果数
+  if(res == 0) {
+    return R.fail(10001, "没有数据");
+  }
+  return R.success(res);
+}
+</code></pre>
+<p>2、我们需要对错误和异常进行进一步的封装</p>
+<h2 id="封装错误和异常结果">封装错误和异常结果</h2>
+<h3 id="创建错误结果实体">创建错误结果实体</h3>
+<p>在包<code>pojo</code>中添加<code>ErrorResult</code>实体类</p>
+<pre><code class="language-java">/**
+ * 异常结果包装类
+ * @author sw-code
+ *
+ */
+public class ErrorResult {
+
+  private Integer code;
+
+  private String message;
+
+  private String exception;
+
+  public Integer getCode() {
+    return code;
+  }
+
+  public void setCode(Integer code) {
+    this.code = code;
+  }
+
+  public String getMessage() {
+    return message;
+  }
+
+  public void setMessage(String message) {
+    this.message = message;
+  }
+
+  public String getException() {
+    return exception;
+  }
+
+  public void setException(String exception) {
+    this.exception = exception;
+  }
+
+  public static ErrorResult fail(ResultCode resultCode, Throwable e, String message) {
+    ErrorResult errorResult = ErrorResult.fail(resultCode, e);
+    errorResult.setMessage(message);
+    return errorResult;
+  }
+
+  public static ErrorResult fail(ResultCode resultCode, Throwable e) {
+    ErrorResult errorResult = new ErrorResult();
+    errorResult.setCode(resultCode.code());
+    errorResult.setMessage(resultCode.message());
+    errorResult.setException(e.getClass().getName());
+    return errorResult;
+  }
+  public static ErrorResult fail(Integer code, String message) {
+    ErrorResult errorResult = new ErrorResult();
+    errorResult.setCode(code);
+    errorResult.setMessage(message);
+    return errorResult;
+  }
+}
+</code></pre>
+<h3 id="自定义异常类">自定义异常类</h3>
+<p>在包<code>pojo</code>中添加<code>BizException</code>实体类，继承<code>RuntimeException</code></p>
+<pre><code class="language-java">@Data
+public class BizException extends RuntimeException {
+
+  /**
+     * 错误码
+     */
+  private Integer code;
+
+  /**
+     * 错误信息
+     */
+  private String message;
+
+  public BizException() {
+    super();
+  }
+
+  public BizException(ResultCode resultCode) {
+    super(resultCode.message());
+    this.code = resultCode.code();
+    this.message = resultCode.message();
+  }
+
+  public BizException(ResultCode resultCode, Throwable cause) {
+    super(resultCode.message(), cause);
+    this.code = resultCode.code();
+    this.message = resultCode.message();
+  }
+
+  public BizException(String message) {
+    super(message);
+    this.code = -1;
+    this.message = message;
+  }
+
+  public BizException(Integer code, String message) {
+    super(message);
+    this.code = code;
+    this.message = message;
+  }
+
+  public BizException(Integer code, String message, Throwable cause) {
+    super(message, cause);
+    this.code = code;
+    this.message = message;
+  }
+
+  @Override
+  public synchronized Throwable fillInStackTrace() {
+    return this;
+  }
+}
+</code></pre>
+<h3 id="全局异常处理类">全局异常处理类</h3>
+<p>在包<code>handler</code>中添加<code>GlobalExceptionHandler</code>，添加<code>@RestControllerAdvice</code>注解</p>
+<pre><code class="language-java">/**
+ * 全局异常处理类
+ * @RestControllerAdvice(@ControllerAdvice)，拦截异常并统一处理
+ * @author sw-code
+ *
+ */
+@Slf4j
+@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+  /**
+	 * 处理自定义的业务异常
+	 * @param e	异常对象
+	 * @param request	request
+	 * @return	错误结果
+	 */
+  @ExceptionHandler(BizException.class)
+  public ErrorResult bizExceptionHandler(BizException e, HttpServletRequest request) {
+    log.error("发生业务异常！原因是: {}", e.getMessage());
+    return ErrorResult.fail(e.getCode(), e.getMessage());
+  }
+
+  // 拦截抛出的异常，@ResponseStatus：用来改变响应状态码
+  @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
+  @ExceptionHandler(Throwable.class)
+  public ErrorResult handlerThrowable(Throwable e, HttpServletRequest request) {
+    log.error("发生未知异常！原因是: ", e);
+    ErrorResult error = ErrorResult.fail(ResultCode.SYSTEM_ERROR, e);
+    return error;
+  }
+
+  // 参数校验异常
+  @ExceptionHandler(BindException.class)
+  public ErrorResult handleBindExcpetion(BindException e, HttpServletRequest request) {
+    log.error("发生参数校验异常！原因是：",e);
+    ErrorResult error = ErrorResult.fail(ResultCode.PARAM_IS_INVALID, e, e.getAllErrors().get(0).getDefaultMessage());
+    return error;
+  }
+
+  @ExceptionHandler(MethodArgumentNotValidException.class)
+  public ErrorResult handleMethodArgumentNotValidException(MethodArgumentNotValidException e, HttpServletRequest request) {
+    log.error("发生参数校验异常！原因是：",e);
+    ErrorResult error = ErrorResult.fail(ResultCode.PARAM_IS_INVALID,e,e.getBindingResult().getAllErrors().get(0).getDefaultMessage());
+    return error;
+  }
+}
+</code></pre>
+<ul>
+<li>添加注解<code>@RestControllerAdvice(@ControllerAdvice)</code>，拦截异常并统一处理</li>
+</ul>
+<h3 id="修改方法返回值拦截处理器">修改方法返回值拦截处理器</h3>
+<p>将错误和异常结果也进行统一封装</p>
+<pre><code class="language-java">/**
+ * 使用 @ControllerAdvice &amp; ResponseBodyAdvice
+ * 拦截Controller方法默认返回参数，统一处理返回值/响应体
+ */
+@ControllerAdvice
+public class ResponseResultHandler implements ResponseBodyAdvice&lt;Object&gt; {
+
+  // 标记名称
+  public static final String RESPONSE_RESULT_ANN = "RESPONSE-RESULT-ANN";
+
+
+  // 判断是否要执行 beforeBodyWrite 方法，true为执行，false不执行，有注解标记的时候处理返回值
+  @Override
+  public boolean supports(MethodParameter arg0, Class&lt;? extends HttpMessageConverter&lt;?&gt;&gt; arg1) {
+    ServletRequestAttributes sra = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+    HttpServletRequest request = sra.getRequest();
+    // 判断请求是否有包装标记
+    ResponseResult responseResultAnn = (ResponseResult) request.getAttribute(RESPONSE_RESULT_ANN);
+    return responseResultAnn == null ? false : true;
+  }
+
+
+  // 对返回值做包装处理，如果属于异常结果，则需要再包装
+  @Override
+  public Object beforeBodyWrite(Object body, MethodParameter arg1, MediaType arg2,
+                                Class&lt;? extends HttpMessageConverter&lt;?&gt;&gt; arg3, ServerHttpRequest arg4, ServerHttpResponse arg5) {
+    if (body instanceof ErrorResult) {
+      ErrorResult error = (ErrorResult) body;
+      return R.fail(error.getCode(), error.getMessage());
+    } else if (body instanceof R) {
+      return (R) body;
+    } else if  (body instanceof String) {
+      return body;
+    }
+    return R.success(body);
+  }
+}
+</code></pre>
+<h3 id="测试-1">测试</h3>
+<pre><code class="language-java">@GetMapping("/fail")
+public Integer error() {
+  int res = 0; // 查询结果数
+  if( res == 0 ) {
+    throw new BizException("没有数据");
+  }
+  return res;
+}
+</code></pre>
+<p>返回结果</p>
+<pre><code class="language-json">{"code":-1,"message":"没有数据","data":null}
+</code></pre>
+<p>我们无需担心返回类型，如果需要返回错误提示信息，可以直接抛出自定义异常(<code>BizException</code>)，并添加自定义错误信息。</p>
+<h2 id="查看源码">查看源码</h2>
+<p><a href="https://gitee.com/SX-Code/springboot-response_result" target="_blank">码云地址</a></p>

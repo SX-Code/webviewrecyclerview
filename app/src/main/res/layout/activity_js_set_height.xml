@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".view.WrapContentActivity">
+
+    <com.example.webview_recyclerview.component.NestedScrollingDetailContainer
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <com.example.webview_recyclerview.component.NestedScrollingWebView
+            android:id="@+id/content_wv"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:tag="nested_scroll_webview"/>
+
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:text="下面是评论"
+            android:textAlignment="center"
+            android:textColor="@color/black"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/comment_rv"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:tag="nested_scroll_recyclerview"/>
+
+    </com.example.webview_recyclerview.component.NestedScrollingDetailContainer>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

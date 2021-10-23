@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">文章详情页</string>
+    <string name="wrap_content_text_bt">wrap_content</string>
+    <string name="match_parent_text_bt">match_parent</string>
+    <string name="js_set_height_text_bt">通过JS设置高度</string>
+    <string name="match_parent_short_data_text_bt">不通过JS设置高度</string>
+</resources>
